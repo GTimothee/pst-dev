@@ -2,37 +2,47 @@ import nibabel as nb
 import numpy as np
 
 def load_mgh(filename):
-    """ import mgh file using nibabel. returns flattened data array"""
+    ''' Import mgh file using nibabel.
+    args
+        filename: file name
+    returns:
+        array_data : flattened data array
+    '''
     mgh_file=nb.load(filename)
     mmap_data=mgh_file.get_data()
     array_data=np.ndarray.flatten(mmap_data)
-    return array_data;
+    return array_data
 
-# function to load mesh geometry
-def load_mesh_geometry(surf_mesh):
-    # if input is a filename, try to load it with nibabel
-    if isinstance(surf_mesh, str):
-        if (surf_mesh.endswith('orig') or surf_mesh.endswith('pial') or
-                surf_mesh.endswith('white') or surf_mesh.endswith('sphere') or
-                surf_mesh.endswith('inflated')):
-            coords, faces = nb.freesurfer.io.read_geometry(surf_mesh)
-        elif surf_mesh.endswith('gii'):
-            coords, faces = nb.gifti.read(surf_mesh).getArraysFromIntent(nb.nifti1.intent_codes['NIFTI_INTENT_POINTSET'])[0].data, \
-                            nb.gifti.read(surf_mesh).getArraysFromIntent(nb.nifti1.intent_codes['NIFTI_INTENT_TRIANGLE'])[0].data
-        elif surf_mesh.endswith('vtk'):
-            coords, faces, _ = read_vtk(surf_mesh)
-        elif surf_mesh.endswith('ply'):
-            coords, faces = read_ply(surf_mesh)
-        elif surf_mesh.endswith('obj'):
-            coords, faces = read_obj(surf_mesh)
-        elif isinstance(surf_mesh, dict):
-            if ('faces' in surf_mesh and 'coords' in surf_mesh):
-                coords, faces = surf_mesh['coords'], surf_mesh['faces']
-            else:
-                raise ValueError('If surf_mesh is given as a dictionary it must '
-                                 'contain items with keys "coords" and "faces"')
+def load_mesh_geometry(file_name):
+    ''' Allow to load a geometry.
+    args:
+        file_name: file name
+    return:
+        dictionary of coords and faces, faces = triangles, coords = XYZ
+    '''
+
+    if isinstance(file_name, str):
+        ext=file_name.split('.')[-1]
+        if (ext in ['orig','pial','white','sphere','inflated']):
+            coords, faces = nb.freesurfer.io.read_geometry(file_name)
+        elif file_name.endswith('gii'):
+            coords = nb.gifti.read(file_name).getArraysFromIntent(nb.nifti1.intent_codes['NIFTI_INTENT_POINTSET'])[0].data
+            faces = nb.gifti.read(file_name).getArraysFromIntent(nb.nifti1.intent_codes['NIFTI_INTENT_TRIANGLE'])[0].data
+        elif file_name.endswith('vtk'):
+            coords, faces, _ = read_vtk(file_name)
+        elif file_name.endswith('ply'):
+            coords, faces = read_ply(file_name)
+        elif file_name.endswith('obj'):
+            coords, faces = read_obj(file_name)
+
+    elif isinstance(file_name, dict):
+        if ('faces' in file_name and 'coords' in file_name):
+            coords, faces = file_name['coords'], file_name['faces']
         else:
-            raise ValueError('surf_mesh must be a either filename or a dictionary '
+            raise ValueError('If file_name is given as a dictionary it must '
+                                 'contain items with keys "coords" and "faces"')
+    else:
+        raise ValueError('file_name must be a either filename or a dictionary '
                              'containing items with keys "coords" and "faces"')
     return {'coords':coords,'faces':faces}
 
@@ -94,7 +104,7 @@ def save_mesh_data(fname, surf_data):
         raise ValueError('fname must be a filename and surf_data must be a numpy array')
 
 
-   
+
 
 
 # function to read vtk files
@@ -195,26 +205,37 @@ def read_obj(file):
     n_poly=[]
     k=0
     Polys=[]
+
 	# Find number of vertices and number of polygons, stored in .obj file.
 	#Then extract list of all vertices in polygons
     for i, line in enumerate(fp):
          if i==0:
-    	#Number of vertices
+    	     #Number of vertices
              n_vert=int(line.split()[6])
              XYZ=np.zeros([n_vert,3])
+
          elif i<=n_vert:
              XYZ[i-1]=list(map(float,line.split()))
+
          elif i>2*n_vert+5:
              if not line.strip():
                  k=1
              elif k==1:
                  Polys.extend(line.split())
+
     Polys=list(map(int,Polys))
     npPolys=np.array(Polys)
     triangles=np.array(list(chunks(Polys,3)))
+
     return XYZ, triangles;
 
-
+'''
+note to self
+use:
+content = f.readlines()
+# you may also want to remove whitespace characters like `\n` at the end of each line
+content = [x.strip() for x in content]
+'''
 
 # function to save mesh geometry
 def save_mesh_geometry(fname,surf_dict):
@@ -241,7 +262,7 @@ def save_mesh_geometry(fname,surf_dict):
     else:
         raise ValueError('fname must be a filename and surf_dict must be a dictionary')
 
-def write_gifti(surf_mesh, coords, faces):
+def write_gifti(file_name, coords, faces):
     coord_array = nb.gifti.GiftiDataArray(data=coords,
                                        intent=nb.nifti1.intent_codes[
                                            'NIFTI_INTENT_POINTSET'])
@@ -249,16 +270,16 @@ def write_gifti(surf_mesh, coords, faces):
                                       intent=nb.nifti1.intent_codes[
                                            'NIFTI_INTENT_TRIANGLE'])
     gii = nb.gifti.GiftiImage(darrays=[coord_array, face_array])
-    nb.gifti.write(gii, surf_mesh)
+    nb.gifti.write(gii, file_name)
 
 
-def save_obj(surf_mesh,coords,faces):
+def save_obj(file_name,coords,faces):
 #write out MNI - obj format
     n_vert=len(coords)
     norms=normal_vectors(coords,faces).tolist()
     XYZ=coords.tolist()
     Tri=faces.tolist()
-    with open(surf_mesh,'w') as s:
+    with open(file_name,'w') as s:
         line1="P 0.3 0.3 0.4 10 1 " + str(n_vert) + "\n"
         s.write(line1)
         k=-1
@@ -413,7 +434,7 @@ def normalize_v3(arr):
     lens = np.sqrt( arr[:,0]**2 + arr[:,1]**2 + arr[:,2]**2 )
     arr[:,0] /= lens
     arr[:,1] /= lens
-    arr[:,2] /= lens                
+    arr[:,2] /= lens
     return arr
 
 def normal_vectors(vertices,faces):
@@ -462,5 +483,3 @@ def flatten(nested_list):
         return flat_list
     else:
         return nested_list
-
-
