@@ -10,11 +10,7 @@ def load_volume(mri_vol):
             img=nb.load(mri_vol)
             # importing mnc files using pyminc, suggest to download if missing
         elif mri_vol.endswith('mnc'):
-            try:
-                import minc as pyezminc
-                img=pyezminc.mnc2nii(mri_vol)
-            except ValueError:
-                print "failed import pyezminc. try installing"
+            img=nb.load(mri_vol)
 # option to add in more file types here, eg analyze
 # if volume is already an np array
     elif isinstance(mri_vol, nb.spatialimages.SpatialImage):
@@ -66,5 +62,3 @@ def mnc2nii(input_fn):
 
 	#Return data structure, data, header, affine
 	return(img_nii) #, img_mnc.data, img_nii.header, affine )
-
-
